@@ -6,14 +6,14 @@ from pcse.base import SimulationObject, ParamTemplate, RatesTemplate, StatesTemp
 from pcse.decorators import prepare_rates, prepare_states
 from pcse.traitlets import Float,Int, Instance, Enum, Unicode
 import math
-from mpmath import mp
-from array import array
-import numpy as np
-
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
-import matplotlib.gridspec as gridspec
-import pandas as pd
+# from mpmath import mp
+# from array import array
+# import numpy as np
+#
+# import matplotlib.pyplot as plt
+# import matplotlib.colors as mcolors
+# import matplotlib.gridspec as gridspec
+# import pandas as pd
 
 from .partitioning import DVS_Partitioning as Partitioning
 from .wofost_soybean_phenology import SoybeanPhenology as Phenology
@@ -115,27 +115,21 @@ class Campbell(SimulationObject):
         RDRT   = AfgenTrait()
         RDRSHM = Float(-99.)
         LAIC   = Float(-99.)
-        
         initLAI = Float(-99.)
-
         K      = Float(-99.)
         Ppar   = Float(-99.)
-        WUE    = Float(-99.)
-       
-        DSLA   = Float(-99.) 
+        Kd     = Float(-99.)
+        DSLA   = Float(-99.)
         NTR    = Float(-99.)
         LNTR   = Float(-99.)
         FNTR  = Float(-99.)
         HD     = Float(-99.)
-
         GCC = Float(-99.)
         FTRANSL = Float(-99.)
-        
         SLATB   = AfgenTrait()
         RUE    = Float(-99.)   
-        
         RDMAX = Float(-99.)
-        
+
                               
     class RateVariables(RatesTemplate):
 
@@ -153,8 +147,6 @@ class Campbell(SimulationObject):
         DM_R    = Float(-99.)
         DM      = Float(-99.)  
         PDM      = Float(-99.)             
-       
-        
         FI      = Float(-99.)
         ROOT    = Float(-99.) 
         STEMS   = Float(-99.) 
@@ -167,8 +159,6 @@ class Campbell(SimulationObject):
         DLEAF   = Float(-99.)
         GLEAF   = Float(-99.)
         TRANSL  = Float(-99.)
-        
-        #root
         RD        = Float(-99.)
         WD        = Float(-99.)
        
@@ -182,7 +172,6 @@ class Campbell(SimulationObject):
         LAI     = Float(-99.) 
         TDLEAF  = Float(-99.)        
         SLA     = Float(-99.)
-
         TDMTRANSL = Float(-99.)
         POOLTRSL = Float(-99.)
         #root
@@ -223,14 +212,12 @@ class Campbell(SimulationObject):
         #         FL = self.kiosk["FL"]
         #         FO = self.kiosk["FO"]
         # =============================================================================
-        self.states = self.StateVariables(kiosk, publish=["TRD"],
-                                       
-                                          TDM=0.00,  GLEAF=0.0, TSTEM=0.0,
-                                          TLEAF=0.0,TSEED=0.0,YIELD=0.0, 
-                                          LAI=self.params.initLAI, TDLEAF =0, SLA=SLA, TRD=0.0,da=0,
-                                          TDMFlowering=None, TDMR1=None, LAIR1=None,TDMR5=None, LAIR5=None,
-                                           CVPDv = 0., CVPDr = 0., CTv= 0., CTr = 0., RADv = 0., RADr =0., 
-                                          TDMTRANSL=0,POOLTRSL=0, CWDv=0.,CWDr=0.)
+        states = dict(TDM=0.00,  GLEAF=0.0, TSTEM=0.0, TLEAF=0.0,TSEED=0.0,YIELD=0.0,
+                      LAI=self.params.initLAI, TDLEAF =0, SLA=SLA, TRD=0.0,da=0,
+                      TDMFlowering=None, TDMR1=None, LAIR1=None,TDMR5=None, LAIR5=None,
+                      CVPDv = 0., CVPDr = 0., CTv= 0., CTr = 0., RADv = 0., RADr =0.,
+                      TDMTRANSL=0,POOLTRSL=0, CWDv=0.,CWDr=0.)
+        self.states = self.StateVariables(kiosk, publish=["TRD"], **states)
 
     @prepare_rates
     def calc_rates(self, day, drv):                
@@ -252,33 +239,36 @@ class Campbell(SimulationObject):
         r.Es_mn=0.6108 * math.exp( max(((17.27 * drv.TMIN)/(drv.TMIN + 237.3)),0.001) )
         r.Es_mx=0.6108 * math.exp( max(((17.27 * drv.TMAX)/(drv.TMAX + 237.3)),0.001) )
         r.Es_avg=(r.Es_mn + r.Es_mx )/2
-        r.VPD=r.Es_avg - convert_hPa_to_KPa(drv.VAP)
+        r.VPD = r.Es_avg - convert_hPa_to_KPa(drv.VAP)
             
-        r.FI = 1. - mp.exp(-p.K * s.LAI)
+        r.FI = 1. - math.exp(-p.K * s.LAI)
         r.PARi = convert_j_Mj(drv.IRRAD) * p.Ppar * r.FI
                    
         if k.DVS < 2:
             if "Ta" not in self.kiosk:
-                k.Ta = 0.001
+                Ta = 0.001
             else:
-                k.Ta = self.kiosk["Ta"]   
+                Ta = self.kiosk["Ta"]
                 
-            if "W_Stress" not in self.kiosk:
-                k.W_Stress = 0.0
-            else:
-                k.W_Stress = self.kiosk["W_Stress"]   
-                
-            if "PTa" not in self.kiosk:
-                k.PTa = 0.0
-            else:
-                k.PTa = self.kiosk["PTa"]     
-                             
-            r.DM_W = k.Ta * (p.WUE/r.VPD)
+            # if "W_Stress" not in self.kiosk:
+            #     W_Stress = 0.0
+            # else:
+            #     W_Stress = self.kiosk["W_Stress"]
+            #
+            # if "PTa" not in self.kiosk:
+            #     PTa = 0.0
+            # else:
+            #     PTa = self.kiosk["PTa"]
+
+            # Growth rate based on water use efficiency.
+            # Sinclair and Ghanem (10.1002/csc2.20067) equation 1
+            r.DM_W = Ta * (p.Kd/r.VPD)
+            # Growth rate based on RUE
             r.DM_R = convert_g_kg(r.PARi * p.RUE )
            
             r.DM = min(r.DM_W, r.DM_R) 
             
-            r.PDM = k.PTa * (p.WUE/r.VPD)                  
+            r.PDM = k.PTa * (p.Kd/r.VPD)
             r.STEMS = r.DM * k.FS             
             r.WLEAF = r.DM * k.FL
             r.LEAF = r.DM * k.FL * convert_ha_m2(s.SLA)            
@@ -288,7 +278,8 @@ class Campbell(SimulationObject):
             if s.TDMTRANSL>0:
                 r.TRANSL = r.PSEED - (r.DM * k.FO)
                 r.SEED = (r.DM * k.FO) + r.TRANSL
-            else: r.SEED = r.DM * k.FO
+            else:
+                r.SEED = r.DM * k.FO
             
             # Senescence from N translocation
             r.TN = ((r.SEED*p.NTR)/p.FNTR)  
@@ -313,7 +304,7 @@ class Campbell(SimulationObject):
 
         #Rooting growth
         r.RD = p.RDMAX * (1./(1+44.2*math.exp(-15*(s.da)/(140))))  
-        r.WD = k.PTa - k.Ta
+        r.WD = k.PTa - Ta
     
 
     @prepare_states

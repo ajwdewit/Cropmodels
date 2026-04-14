@@ -9,7 +9,7 @@ from pcse.base import SimulationObject, ParamTemplate, RatesTemplate, StatesTemp
 from pcse.decorators import prepare_rates, prepare_states
 from pcse.traitlets import Float,Int, Instance, Enum, Unicode
 import math
-from mpmath import mp
+# from mpmath import mp
 from array import array
 import numpy as np
 
@@ -36,14 +36,16 @@ def convert_g_kg(g):
 
     
 class Water_balance(SimulationObject):
-    '''Parameters**
+    '''A simple multi-layered waterbalance based on the Campbell-Diaz waterbalance model
+
+    **Parameters**
 
     ============ ================================================= ==== ========
      Name        Description                                             Unit
     ============ ================================================= ==== ========
     FCP          Field capacity                                     mH2O m Soil
-    PWPP         Permanent wilting point                            mH2O m Soi   
-    ADWCP         Air dry water content                              mH2O m Soi   
+    PWPP         Permanent wilting point                            mH2O m Soil
+    ADWCP        Air dry water content                              mH2O m Soil
     TCK          Thickness of soil layer                                    m
     RUNOFF1      Parameter 1 for runoff function   
     RUNOFF2      Parameter 2 for runoff function          
@@ -51,10 +53,10 @@ class Water_balance(SimulationObject):
     PSIPWP       Permanent wilting water potential                       J kg-1 
     PSIFC        Field capacity water potential                          J kg-1 
     S            Surface storage condition                                  m
-    RDMAX        Maximun root depth                                         m
-                                           m               
+    RDMAX        Maximum root depth                                         m
     ============ ================================================= ==== ========
-    Rates**
+
+    **Rates**
 
     ============ ================================================= ==== ========
      Name        Description                                             Unit
@@ -79,9 +81,9 @@ class Water_balance(SimulationObject):
     TL           Transpiration per layer                                    m
     AT           Actual Evapotranspiration per layer                        m
     T            Total Evapotranspiration                                   m
-   
     ============ ================================================= ==== ========
-    State variables**
+
+    **State variables**
  
     Name         Description                                             Unit
     ============ ================================================= ==== ========
@@ -121,7 +123,6 @@ class Water_balance(SimulationObject):
         PSIPWP= Float(-99.)
         PSIFC = Float(-99.)
         S     = Float(-99.)
-        
         RDMAX = Float(-99.)
         
     class RateVariables(RatesTemplate):
@@ -169,6 +170,7 @@ class Water_balance(SimulationObject):
         arr_mult  = Instance(np.ndarray) 
         AT         = Instance(np.ndarray) 
         check = Float(-99.)
+        Ta      = Float(-99.)
 
     class StateVariables(StatesTemplate):  
         PTa     = Float(-99.)
@@ -180,8 +182,7 @@ class Water_balance(SimulationObject):
         TRUNOFF = Float(-99.)         
         PERC    = Float(-99.)                
         TE      = Float(-99.)
-        Ta      = Float(-99.)    
-        WC      = Instance(np.ndarray) 
+        WC      = Instance(np.ndarray)
         WCv     = Instance(np.ndarray) 
         #To chech WB closed
         TT        = Float(-99.)
@@ -199,10 +200,10 @@ class Water_balance(SimulationObject):
                 
     def initialize(self, day, kiosk, parametervalues):        
         self.params = self.Parameters(parametervalues)
-        self.rates = self.RateVariables(kiosk,publish = None)        
+        self.rates = self.RateVariables(kiosk,publish = ["Ta"])
         self.kiosk = kiosk
         layers = math.floor(self.params.RDMAX/self.params.TCK)
-        self.states = self.StateVariables(kiosk, publish=["Ta", "W_Stress","PTa"],  PTa=0,
+        self.states = self.StateVariables(kiosk, publish=["W_Stress","PTa"],  PTa=0,
                                           TPE=0.0, TPT=0.0,
                                           WC=np.full(layers,self.params.FCP*self.params.TCK), 
                                           WCv=np.full(layers,self.params.FCP*self.params.TCK),
@@ -218,17 +219,17 @@ class Water_balance(SimulationObject):
         k = self.kiosk     
         
         if "FI" not in self.kiosk: 
-             k.FI = 0.0
+            FI = 0.0
         else: 
-            k.FI=self.kiosk["FI"]
+            FI = k.FI
          
         if "TRD" not in self.kiosk: 
-            k.TRD = 0.0
+            TRD = 0.0
         else:
-            k.TRD = self.kiosk["TRD"]
+            TRD = k.TRD
 
-        r.PE = convert_cm_to_m(drv.ET0 * (1 - k.FI))
-        r.PT = convert_cm_to_m(drv.ET0 * k.FI)
+        r.PE = convert_cm_to_m(drv.ET0 * (1 - FI))
+        r.PT = convert_cm_to_m(drv.ET0 * FI)
         r.ETP=convert_cm_to_m(drv.ET0)*100*10
        
        
@@ -246,7 +247,7 @@ class Water_balance(SimulationObject):
         r.PREC = drv.RAIN /100
        
         if drv.RAIN != 0.:
-            r.INTERC = min(drv.RAIN/100, 0.001 * k.FI) 
+            r.INTERC = min(drv.RAIN/100, 0.001 * FI)
         r.GPREC = ((drv.RAIN/100) - r.INTERC)
         
         # Runoff calculation
@@ -289,21 +290,21 @@ class Water_balance(SimulationObject):
             # Fraction root per layer
             if j >= 1:
                 r.z+=p.TCK
-                if r.z <= k.TRD:                     
-                    r.FROOT = p.TCK*(2.*(k.TRD - r.z) + p.TCK)/(k.TRD*k.TRD)
-                elif r.z > k.TRD and (r.z - p.TCK) < k.TRD:
-                    r.FROOT = ((k.TRD - r.z + p.TCK)/k.TRD)**2.
+                if r.z <= TRD:
+                    r.FROOT = p.TCK * (2.*(TRD - r.z) + p.TCK)/(TRD*TRD)
+                elif r.z > TRD and (r.z - p.TCK) < TRD:
+                    r.FROOT = ((TRD - r.z + p.TCK)/TRD)**2.
                 else:
                     r.FROOT = 0.
 
-                r.SPSI = -r.A*mp.exp(-r.B*math.log(max((s.WC[j]/p.TCK), sys.float_info.min)))
+                r.SPSI = -r.A*math.exp(-r.B*math.log(max((s.WC[j]/p.TCK), sys.float_info.min)))
                 r.AVEPSI += (r.FROOT*r.SPSI)                                      
                 r.values_FR.append(r.FROOT)  
                 r.FcR = np.array(r.values_FR)
                 r.values_SPSI.append(r.SPSI)
                 r.SP = np.array(r.values_SPSI)
 
-        r.RBAR = p.RMIN/max(k.FI, 1e-70)
+        r.RBAR = p.RMIN/max(FI, 1e-70)
         r.PSIX = r.AVEPSI - (r.RBAR*r.PT) 
     
         if r.PSIX < p.PSIPWP: r.PSIX=p.PSIPWP
@@ -319,10 +320,12 @@ class Water_balance(SimulationObject):
         r.arr_TRUE = np.subtract(r.W, p.PWPP)
         
         # Actual evapotranspiration        
-        r.TL= np.multiply(np.where(r.arr_bool, r.arr_TRUE, r.LOSS), p.TCK)
+        r.TL = np.multiply(np.where(r.arr_bool, r.arr_TRUE, r.LOSS), p.TCK)
         r.AT = np.append(r.EVS, r.TL)
         r.T = np.sum(r.TL)
         r.net_RW = np.subtract(r.RWATER, r.AT)
+        r.Ta = r.T
+
         
                 
 
@@ -342,13 +345,12 @@ class Water_balance(SimulationObject):
         s.TRUNOFF +=  r.RUNOFF
         s.PERC +=r.INFIL        
         s.TE += r.EVS
-        s.Ta = r.T
-        
+
         s.WC = np.add(s.WC, r.net_RW)
         s.WCv = (s.WC / p.TCK)    
           
         # check WB closed
-        s.TT+=r.T
+        s.TT += r.T
         s.Diff_WC = np.sum(np.subtract(np.full(r.nl, r.FC), s.WC) )
         s.WB_close = s.TINTERC - s.TRUNOFF - s.PERC - s.TT - s.TE + s.Diff_WC
         s.TWC = (np.sum(np.subtract(s.WC, r.PWP)))*1000

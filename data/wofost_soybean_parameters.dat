@@ -179,17 +179,17 @@ TBASE    =   7.0    # lower threshold temp. for ageing of leaves [cel]
 
 initLAI=0.2
 
-K = 0.48
-Ppar = 0.47
-FTRANSL = 0.22
-GCC = 0.77
-HD = 1.149
-RDRSHM = 0.03
-LAIC = 4
-
-FNTR=3
-NTR = 0.065
-LNTR = 0.04
-WUE = 4
-DSLA = 25
-RUE = 2.84
+K = 0.48         # Light extinction coefficient (Kukal and Irmak, 2020)
+Ppar = 0.47      # Proportion of PAR in the total radiation
+FTRANSL = 0.22   # Fraction of TDM to be translocated
+GCC = 0.77       # Conversion coefficient (CHO to soyeban seed)
+HD = 1.149       # Factor to standardize humidity content at 13% 
+RDRSHM = 0.03    # Maximum relative death rate of leaves due to shading (LINTUL2)
+LAIC = 4         # Critic leaf area index
+                 #
+FNTR=3           # Fraction of N translocated from leaves to seeds
+NTR = 0.065      # Nitrogen content in grain
+LNTR = 0.04      # Nitrogen content in leaves
+Kd = 4           # Dry matter water ratio
+DSLA = 25        # Specific leaf area for dead leaves
+RUE = 2.84       # Radiation use efficiency (Kukal and Irmak, 2020)
